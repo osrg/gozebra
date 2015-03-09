@@ -299,6 +299,72 @@ func (b *HelloBody) Serialize() ([]byte, error) {
 	return []byte{uint8(b.Redist)}, nil
 }
 
+type InterfaceUpdateBody struct {
+	Name         string
+	Index        uint32
+	Status       INTERFACE_STATUS
+	Flags        uint64
+	Metric       uint32
+	MTU          uint32
+	MTU6         uint32
+	Bandwidth    uint32
+	HardwareAddr net.HardwareAddr
+}
+
+func (b *InterfaceUpdateBody) DecodeFromBytes(data []byte) error {
+	if len(data) < INTERFACE_NAMSIZ+29 {
+		return fmt.Errorf("lack of bytes. need %d but %d", INTERFACE_NAMSIZ+29, len(data))
+	}
+
+	b.Name = string(data[:INTERFACE_NAMSIZ])
+	data = data[INTERFACE_NAMSIZ:]
+	b.Index = binary.BigEndian.Uint32(data[:4])
+	b.Status = INTERFACE_STATUS(data[4])
+	b.Flags = binary.BigEndian.Uint64(data[5:13])
+	b.Metric = binary.BigEndian.Uint32(data[13:17])
+	b.MTU = binary.BigEndian.Uint32(data[17:21])
+	b.MTU6 = binary.BigEndian.Uint32(data[21:25])
+	b.Bandwidth = binary.BigEndian.Uint32(data[25:29])
+	l := binary.BigEndian.Uint32(data[29:33])
+	if l > 0 {
+		b.HardwareAddr = data[33 : 33+l]
+	}
+	return nil
+}
+
+func (b *InterfaceUpdateBody) Serialize() ([]byte, error) {
+	return []byte{}, nil
+}
+
+type InterfaceAddressUpdateBody struct {
+	Index  uint32
+	Flags  uint8
+	Prefix net.IP
+	Length uint8
+}
+
+func (b *InterfaceAddressUpdateBody) DecodeFromBytes(data []byte) error {
+	b.Index = binary.BigEndian.Uint32(data[:4])
+	b.Flags = data[4]
+	family := data[5]
+	var addrlen int8
+	switch family {
+	case syscall.AF_INET:
+		addrlen = net.IPv4len
+	case syscall.AF_INET6:
+		addrlen = net.IPv6len
+	default:
+		return fmt.Errorf("unknown address family: %d", family)
+	}
+	b.Prefix = data[6 : 6+addrlen]
+	b.Length = data[6+addrlen]
+	return nil
+}
+
+func (b *InterfaceAddressUpdateBody) Serialize() ([]byte, error) {
+	return []byte{}, nil
+}
+
 type RouterIDUpdateBody struct {
 	Length uint8
 	Prefix net.IP
@@ -426,6 +492,10 @@ func ParseMessage(hdr *Header, data []byte) (*Message, error) {
 	m := &Message{Header: *hdr}
 
 	switch m.Header.Command {
+	case INTERFACE_ADD, INTERFACE_DELETE, INTERFACE_UP, INTERFACE_DOWN:
+		m.Body = &InterfaceUpdateBody{}
+	case INTERFACE_ADDRESS_ADD, INTERFACE_ADDRESS_DELETE:
+		m.Body = &InterfaceAddressUpdateBody{}
 	case ROUTER_ID_UPDATE:
 		m.Body = &RouterIDUpdateBody{}
 	default:
