@@ -142,6 +142,7 @@ const (
 type Client struct {
 	outgoing      chan *Message
 	redistDefault ROUTE_TYPE
+	conn          net.Conn
 }
 
 func readAll(conn net.Conn, length int) ([]byte, error) {
@@ -188,25 +189,35 @@ func (c *Client) SendInterfaceAdd() error {
 	return c.SendCommand(INTERFACE_ADD, nil)
 }
 
+func (c *Client) Close() error {
+	close(c.outgoing)
+	return c.conn.Close()
+}
+
 func NewClient(network, address string, typ ROUTE_TYPE) (*Client, error) {
 	conn, err := net.Dial(network, address)
 	if err != nil {
 		return nil, err
 	}
 	outgoing := make(chan *Message)
-	go func() error {
+	go func() {
 		for {
-			m := <-outgoing
-			b, err := m.Serialize()
-			if err != nil {
-				log.Warnf("failed to serialize: %s", m)
-				continue
-			}
+			m, more := <-outgoing
+			if more {
+				b, err := m.Serialize()
+				if err != nil {
+					log.Warnf("failed to serialize: %s", m)
+					continue
+				}
 
-			_, err = conn.Write(b)
-			if err != nil {
-				log.Error("failed to write: %v", b)
-				return nil
+				_, err = conn.Write(b)
+				if err != nil {
+					log.Errorf("failed to write: ", err)
+					return
+				}
+			} else {
+				log.Debug("finish outgoing loop")
+				return
 			}
 		}
 	}()
@@ -238,6 +249,7 @@ func NewClient(network, address string, typ ROUTE_TYPE) (*Client, error) {
 	return &Client{
 		outgoing:      outgoing,
 		redistDefault: typ,
+		conn:          conn,
 	}, nil
 
 }
