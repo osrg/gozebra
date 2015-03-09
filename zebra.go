@@ -188,6 +188,40 @@ type Client struct {
 	conn          net.Conn
 }
 
+func NewClient(network, address string, typ ROUTE_TYPE) (*Client, error) {
+	conn, err := net.Dial(network, address)
+	if err != nil {
+		return nil, err
+	}
+	outgoing := make(chan *Message)
+	go func() {
+		for {
+			m, more := <-outgoing
+			if more {
+				b, err := m.Serialize()
+				if err != nil {
+					log.Warnf("failed to serialize: %s", m)
+					continue
+				}
+
+				_, err = conn.Write(b)
+				if err != nil {
+					log.Errorf("failed to write: ", err)
+					return
+				}
+			} else {
+				log.Debug("finish outgoing loop")
+				return
+			}
+		}
+	}()
+	return &Client{
+		outgoing:      outgoing,
+		redistDefault: typ,
+		conn:          conn,
+	}, nil
+}
+
 func readAll(conn net.Conn, length int) ([]byte, error) {
 	buf := make([]byte, length)
 	for cur := 0; cur < length; {
@@ -198,6 +232,43 @@ func readAll(conn net.Conn, length int) ([]byte, error) {
 		}
 	}
 	return buf, nil
+}
+
+func (c *Client) StartRecieving() (chan *Message, error) {
+	incoming := make(chan *Message, 64)
+	go func() error {
+		for {
+			headerBuf, err := readAll(c.conn, HEADER_SIZE)
+			if err != nil {
+				log.Error("failed to read header: ", err)
+				return err
+			}
+
+			hd := &Header{}
+			err = hd.DecodeFromBytes(headerBuf)
+			if err != nil {
+				log.Error("failed to decode header: ", err)
+				return err
+			}
+
+			bodyBuf, err := readAll(c.conn, int(hd.Len-HEADER_SIZE))
+			if err != nil {
+				log.Error("failed to read body: ", err)
+				return err
+			}
+
+			m, err := ParseMessage(hd, bodyBuf)
+			if err != nil {
+				log.Warn("failed to parse message: ", err)
+				continue
+			}
+			select {
+			case incoming <- m:
+			default:
+			}
+		}
+	}()
+	return incoming, nil
 }
 
 func (c *Client) SendCommand(command API_TYPE, body Body) error {
@@ -235,69 +306,6 @@ func (c *Client) SendInterfaceAdd() error {
 func (c *Client) Close() error {
 	close(c.outgoing)
 	return c.conn.Close()
-}
-
-func NewClient(network, address string, typ ROUTE_TYPE) (*Client, error) {
-	conn, err := net.Dial(network, address)
-	if err != nil {
-		return nil, err
-	}
-	outgoing := make(chan *Message)
-	go func() {
-		for {
-			m, more := <-outgoing
-			if more {
-				b, err := m.Serialize()
-				if err != nil {
-					log.Warnf("failed to serialize: %s", m)
-					continue
-				}
-
-				_, err = conn.Write(b)
-				if err != nil {
-					log.Errorf("failed to write: ", err)
-					return
-				}
-			} else {
-				log.Debug("finish outgoing loop")
-				return
-			}
-		}
-	}()
-	go func() error {
-		for {
-			headerBuf, err := readAll(conn, HEADER_SIZE)
-			if err != nil {
-				log.Error("failed to read header: ", err)
-				return err
-			}
-
-			hd := &Header{}
-			err = hd.DecodeFromBytes(headerBuf)
-			if err != nil {
-				log.Error("failed to decode header: ", err)
-				return err
-			}
-
-			bodyBuf, err := readAll(conn, int(hd.Len-HEADER_SIZE))
-			if err != nil {
-				log.Error("failed to read body: ", err)
-				return err
-			}
-
-			m, err := ParseMessage(hd, bodyBuf)
-			if err != nil {
-				log.Warn("failed to parse message: ", err)
-				continue
-			}
-		}
-	}()
-	return &Client{
-		outgoing:      outgoing,
-		redistDefault: typ,
-		conn:          conn,
-	}, nil
-
 }
 
 type Header struct {
