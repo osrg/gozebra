@@ -9,6 +9,17 @@ A quagga zapi library implemented in Go.
 ```go
 cli, _ := zebra.NewClient("unix", "/var/run/quagga/zserv.api", zebra.ROUTE_BGP)
 
+ch, _ := cli.StartRecieving()
+go func() {
+	for {
+		m := <-ch
+		log.Debug(m)
+	}
+}()
+
+// this asks zebra to send all interface information
+cli.SendCommand(zebra.INTERFACE_ADD, nil)
+
 b := &zebra.IPv4RouteBody{
 	Type:         zebra.ROUTE_BGP,
 	SAFI:         zebra.SAFI_UNICAST,
@@ -21,4 +32,6 @@ b := &zebra.IPv4RouteBody{
 }
 
 cli.SendCommand(zebra.IPV4_ROUTE_ADD, b)
+
+cli.Close()
 ```
