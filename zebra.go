@@ -20,24 +20,38 @@ import (
 	"fmt"
 	log "github.com/Sirupsen/logrus"
 	"net"
-)
-
-// Move these somewhere
-const (
-	AF_INET  = 2
-	AF_INET6 = 3
+	"strings"
+	"syscall"
 )
 
 const (
-	IPV4_MAX_BYTELEN = 4
-	IPV6_MAX_BYTELEN = 16
+	HEADER_SIZE      = 6
+	HEADER_MARKER    = 255
+	VERSION          = 2
+	INTERFACE_NAMSIZ = 20
 )
 
+type INTERFACE_STATUS uint8
+
 const (
-	HEADER_SIZE   = 6
-	HEADER_MARKER = 255
-	VERSION       = 2
+	INTERFACE_ACTIVE        = 0x01
+	INTERFACE_SUB           = 0x02
+	INTERFACE_LINKDETECTION = 0x04
 )
+
+func (t INTERFACE_STATUS) String() string {
+	ss := make([]string, 0, 3)
+	if t&INTERFACE_ACTIVE > 0 {
+		ss = append(ss, "ACTIVE")
+	}
+	if t&INTERFACE_SUB > 0 {
+		ss = append(ss, "SUB")
+	}
+	if t&INTERFACE_LINKDETECTION > 0 {
+		ss = append(ss, "LINKDETECTION")
+	}
+	return strings.Join(ss, "|")
+}
 
 // Subsequent Address Family Identifier.
 type SAFI uint8
@@ -110,7 +124,7 @@ const (
 )
 
 // Message Flags
-type FLAG uint8
+type FLAG uint64
 
 const (
 	FLAG_INTERNAL  FLAG = 0x01
@@ -122,6 +136,35 @@ const (
 	FLAG_STATIC    FLAG = 0x40
 	FLAG_REJECT    FLAG = 0x80
 )
+
+func (t FLAG) String() string {
+	var ss []string
+	if t&FLAG_INTERNAL > 0 {
+		ss = append(ss, "FLAG_INTERNAL")
+	}
+	if t&FLAG_SELFROUTE > 0 {
+		ss = append(ss, "FLAG_SELFROUTE")
+	}
+	if t&FLAG_BLACKHOLE > 0 {
+		ss = append(ss, "FLAG_BLACKHOLE")
+	}
+	if t&FLAG_IBGP > 0 {
+		ss = append(ss, "FLAG_IBGP")
+	}
+	if t&FLAG_SELECTED > 0 {
+		ss = append(ss, "FLAG_SELECTED")
+	}
+	if t&FLAG_CHANGED > 0 {
+		ss = append(ss, "FLAG_CHANGED")
+	}
+	if t&FLAG_STATIC > 0 {
+		ss = append(ss, "FLAG_STATIC")
+	}
+	if t&FLAG_REJECT > 0 {
+		ss = append(ss, "FLAG_REJECT")
+	}
+	return strings.Join(ss, "|")
+}
 
 // Nexthop Flags.
 type NEXTHOP_FLAG uint8
@@ -225,25 +268,28 @@ func NewClient(network, address string, typ ROUTE_TYPE) (*Client, error) {
 		for {
 			headerBuf, err := readAll(conn, HEADER_SIZE)
 			if err != nil {
+				log.Error("failed to read header: ", err)
 				return err
 			}
 
 			hd := &Header{}
 			err = hd.DecodeFromBytes(headerBuf)
 			if err != nil {
+				log.Error("failed to decode header: ", err)
 				return err
 			}
 
 			bodyBuf, err := readAll(conn, int(hd.Len-HEADER_SIZE))
 			if err != nil {
+				log.Error("failed to read body: ", err)
 				return err
 			}
 
 			m, err := ParseMessage(hd, bodyBuf)
 			if err != nil {
-				return err
+				log.Warn("failed to parse message: ", err)
+				continue
 			}
-			log.Debugf("recv: %s", m)
 		}
 	}()
 	return &Client{
@@ -335,6 +381,75 @@ func (b *InterfaceUpdateBody) DecodeFromBytes(data []byte) error {
 func (b *InterfaceUpdateBody) Serialize() ([]byte, error) {
 	return []byte{}, nil
 }
+func intfflag2string(flag uint64) string {
+	ss := make([]string, 0, 10)
+	if flag&syscall.IFF_UP > 0 {
+		ss = append(ss, "UP")
+	}
+	if flag&syscall.IFF_BROADCAST > 0 {
+		ss = append(ss, "BROADCAST")
+	}
+	if flag&syscall.IFF_DEBUG > 0 {
+		ss = append(ss, "DEBUG")
+	}
+	if flag&syscall.IFF_LOOPBACK > 0 {
+		ss = append(ss, "LOOPBACK")
+	}
+	if flag&syscall.IFF_POINTOPOINT > 0 {
+		ss = append(ss, "POINTOPOINT")
+	}
+	if flag&syscall.IFF_NOTRAILERS > 0 {
+		ss = append(ss, "NOTRAILERS")
+	}
+	if flag&syscall.IFF_RUNNING > 0 {
+		ss = append(ss, "RUNNING")
+	}
+	if flag&syscall.IFF_NOARP > 0 {
+		ss = append(ss, "NOARP")
+	}
+	if flag&syscall.IFF_PROMISC > 0 {
+		ss = append(ss, "PROMISC")
+	}
+	if flag&syscall.IFF_ALLMULTI > 0 {
+		ss = append(ss, "ALLMULTI")
+	}
+	if flag&syscall.IFF_MASTER > 0 {
+		ss = append(ss, "MASTER")
+	}
+	if flag&syscall.IFF_SLAVE > 0 {
+		ss = append(ss, "SLAVE")
+	}
+	if flag&syscall.IFF_MULTICAST > 0 {
+		ss = append(ss, "MULTICAST")
+	}
+	if flag&syscall.IFF_PORTSEL > 0 {
+		ss = append(ss, "PORTSEL")
+	}
+	if flag&syscall.IFF_AUTOMEDIA > 0 {
+		ss = append(ss, "AUTOMEDIA")
+	}
+	if flag&syscall.IFF_DYNAMIC > 0 {
+		ss = append(ss, "DYNAMIC")
+	}
+	//	if flag&syscall.IFF_LOWER_UP > 0 {
+	//		ss = append(ss, "LOWER_UP")
+	//	}
+	//	if flag&syscall.IFF_DORMANT > 0 {
+	//		ss = append(ss, "DORMANT")
+	//	}
+	//	if flag&syscall.IFF_ECHO > 0 {
+	//		ss = append(ss, "ECHO")
+	//	}
+	return strings.Join(ss, " | ")
+}
+
+func (b *InterfaceUpdateBody) String() string {
+	s := fmt.Sprintf("name: %s, idx: %d, status: %s, flags: %s, metric: %d, mtu: %d, mtu6: %d, bandwith: %d", b.Name, b.Index, b.Status, intfflag2string(b.Flags), b.Metric, b.MTU, b.MTU6, b.Bandwidth)
+	if len(b.HardwareAddr) > 0 {
+		return s + fmt.Sprintf(", mac: %s", b.HardwareAddr)
+	}
+	return s
+}
 
 type InterfaceAddressUpdateBody struct {
 	Index  uint32
@@ -365,6 +480,10 @@ func (b *InterfaceAddressUpdateBody) Serialize() ([]byte, error) {
 	return []byte{}, nil
 }
 
+func (b *InterfaceAddressUpdateBody) String() string {
+	return fmt.Sprintf("idx: %d, flags: %d, addr: %s/%d", b.Index, b.Flags, b.Prefix, b.Length)
+}
+
 type RouterIDUpdateBody struct {
 	Length uint8
 	Prefix net.IP
@@ -374,10 +493,10 @@ func (b *RouterIDUpdateBody) DecodeFromBytes(data []byte) error {
 	family := data[0]
 	var addrlen int8
 	switch family {
-	case AF_INET:
-		addrlen = IPV4_MAX_BYTELEN
-	case AF_INET6:
-		addrlen = IPV6_MAX_BYTELEN
+	case syscall.AF_INET:
+		addrlen = net.IPv4len
+	case syscall.AF_INET6:
+		addrlen = net.IPv6len
 	default:
 		return fmt.Errorf("unknown address family: %d", family)
 	}
@@ -388,6 +507,10 @@ func (b *RouterIDUpdateBody) DecodeFromBytes(data []byte) error {
 
 func (b *RouterIDUpdateBody) Serialize() ([]byte, error) {
 	return []byte{}, nil
+}
+
+func (b *RouterIDUpdateBody) String() string {
+	return fmt.Sprintf("id: %s/%d", b.Prefix, b.Length)
 }
 
 type IPv4RouteBody struct {
