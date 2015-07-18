@@ -224,14 +224,8 @@ func NewClient(network, address string, typ ROUTE_TYPE) (*Client, error) {
 
 func readAll(conn net.Conn, length int) ([]byte, error) {
 	buf := make([]byte, length)
-	for cur := 0; cur < length; {
-		if num, err := conn.Read(buf); err != nil {
-			return nil, err
-		} else {
-			cur += num
-		}
-	}
-	return buf, nil
+	_, err := io.ReadFull(conn, buf)
+	return buf, err
 }
 
 func (c *Client) StartRecieving() (chan *Message, error) {
