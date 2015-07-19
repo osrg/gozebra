@@ -19,6 +19,7 @@ import (
 	"encoding/binary"
 	"fmt"
 	log "github.com/Sirupsen/logrus"
+	"io"
 	"net"
 	"strings"
 	"syscall"
