@@ -9,10 +9,9 @@ A quagga zapi library implemented in Go.
 ```go
 cli, _ := zebra.NewClient("unix", "/var/run/quagga/zserv.api", zebra.ROUTE_BGP)
 
-ch, _ := cli.StartRecieving()
 go func() {
 	for {
-		m := <-ch
+		m := <-cli.Recieve()
 		log.Debug(m)
 	}
 }()

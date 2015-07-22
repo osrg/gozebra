@@ -185,6 +185,7 @@ const (
 
 type Client struct {
 	outgoing      chan *Message
+	incoming      chan *Message
 	redistDefault ROUTE_TYPE
 	conn          net.Conn
 }
@@ -216,24 +217,11 @@ func NewClient(network, address string, typ ROUTE_TYPE) (*Client, error) {
 			}
 		}
 	}()
-	return &Client{
-		outgoing:      outgoing,
-		redistDefault: typ,
-		conn:          conn,
-	}, nil
-}
 
-func readAll(conn net.Conn, length int) ([]byte, error) {
-	buf := make([]byte, length)
-	_, err := io.ReadFull(conn, buf)
-	return buf, err
-}
-
-func (c *Client) StartRecieving() (chan *Message, error) {
 	incoming := make(chan *Message, 64)
 	go func() error {
 		for {
-			headerBuf, err := readAll(c.conn, HEADER_SIZE)
+			headerBuf, err := readAll(conn, HEADER_SIZE)
 			if err != nil {
 				log.Error("failed to read header: ", err)
 				return err
@@ -246,7 +234,7 @@ func (c *Client) StartRecieving() (chan *Message, error) {
 				return err
 			}
 
-			bodyBuf, err := readAll(c.conn, int(hd.Len-HEADER_SIZE))
+			bodyBuf, err := readAll(conn, int(hd.Len-HEADER_SIZE))
 			if err != nil {
 				log.Error("failed to read body: ", err)
 				return err
@@ -257,13 +245,26 @@ func (c *Client) StartRecieving() (chan *Message, error) {
 				log.Warn("failed to parse message: ", err)
 				continue
 			}
-			select {
-			case incoming <- m:
-			default:
-			}
+
+			incoming <- m
 		}
 	}()
-	return incoming, nil
+	return &Client{
+		outgoing:      outgoing,
+		incoming:      incoming,
+		redistDefault: typ,
+		conn:          conn,
+	}, nil
+}
+
+func readAll(conn net.Conn, length int) ([]byte, error) {
+	buf := make([]byte, length)
+	_, err := io.ReadFull(conn, buf)
+	return buf, err
+}
+
+func (c *Client) Recieve() chan *Message {
+	return c.incoming
 }
 
 func (c *Client) SendCommand(command API_TYPE, body Body) error {
