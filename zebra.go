@@ -313,8 +313,8 @@ type Header struct {
 func (h *Header) Serialize() ([]byte, error) {
 	buf := make([]byte, HEADER_SIZE)
 	binary.BigEndian.PutUint16(buf[0:], h.Len)
-	buf[2] = HEADER_MARKER
-	buf[3] = VERSION
+	buf[2] = h.Marker
+	buf[3] = h.Version
 	binary.BigEndian.PutUint16(buf[4:], uint16(h.Command))
 	return buf, nil
 }
