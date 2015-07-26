@@ -267,6 +267,10 @@ func (c *Client) Recieve() chan *Message {
 	return c.incoming
 }
 
+func (c *Client) Send(m *Message) {
+	c.outgoing <- m
+}
+
 func (c *Client) SendCommand(command API_TYPE, body Body) error {
 	m := &Message{
 		Header: Header{
@@ -277,7 +281,7 @@ func (c *Client) SendCommand(command API_TYPE, body Body) error {
 		},
 		Body: body,
 	}
-	c.outgoing <- m
+	c.Send(m)
 	return nil
 }
 
