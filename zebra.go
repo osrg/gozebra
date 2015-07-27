@@ -521,7 +521,7 @@ func (b *RouterIDUpdateBody) String() string {
 	return fmt.Sprintf("id: %s/%d", b.Prefix, b.Length)
 }
 
-type IPv4RouteBody struct {
+type IPRouteBody struct {
 	Type         ROUTE_TYPE
 	Flags        FLAG
 	Message      uint8
@@ -534,7 +534,7 @@ type IPv4RouteBody struct {
 	Metric       uint32
 }
 
-func (b *IPv4RouteBody) DecodeFromBytes(data []byte) error {
+func (b *IPRouteBody) DecodeFromBytes(data []byte) error {
 	b.Type = ROUTE_TYPE(data[0])
 	b.Flags = FLAG(data[1])
 	b.Message = data[2]
@@ -544,20 +544,16 @@ func (b *IPv4RouteBody) DecodeFromBytes(data []byte) error {
 	return nil
 }
 
-func (b *IPv4RouteBody) Serialize() ([]byte, error) {
+func (b *IPRouteBody) Serialize() ([]byte, error) {
 	buf := make([]byte, 5)
 	buf[0] = uint8(b.Type)
 	buf[1] = uint8(b.Flags)
 	buf[2] = b.Message
 	binary.BigEndian.PutUint16(buf[3:], uint16(b.SAFI))
-	ip := b.Prefix.To4()
-	if ip == nil {
-		return nil, fmt.Errorf("prefix must be IPv4: %s", b.Prefix)
-	}
 	bitlen := b.PrefixLength
 	bytelen := (int(b.PrefixLength) + 7) / 8
 	bbuf := make([]byte, bytelen)
-	copy(bbuf, ip)
+	copy(bbuf, b.Prefix)
 	if bitlen%8 != 0 {
 		mask := 0xff00 >> (bitlen % 8)
 		last_byte_value := bbuf[bytelen-1] & byte(mask)
@@ -574,8 +570,13 @@ func (b *IPv4RouteBody) Serialize() ([]byte, error) {
 		}
 
 		for _, v := range b.Nexthops {
-			buf = append(buf, uint8(NEXTHOP_IPV4))
-			buf = append(buf, v.To4()...)
+			if v.To4() != nil {
+				buf = append(buf, uint8(NEXTHOP_IPV4))
+				buf = append(buf, v.To4()...)
+			} else {
+				buf = append(buf, uint8(NEXTHOP_IPV6))
+				buf = append(buf, v.To16()...)
+			}
 		}
 
 		for _, v := range b.Ifindexs {
