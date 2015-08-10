@@ -1,5 +1,3 @@
-// +build !darwin
-
 // Copyright (C) 2014, 2015 Nippon Telegraph and Telephone Corporation.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
@@ -423,23 +421,8 @@ func intfflag2string(flag uint64) string {
 	if flag&syscall.IFF_ALLMULTI > 0 {
 		ss = append(ss, "ALLMULTI")
 	}
-	if flag&syscall.IFF_MASTER > 0 {
-		ss = append(ss, "MASTER")
-	}
-	if flag&syscall.IFF_SLAVE > 0 {
-		ss = append(ss, "SLAVE")
-	}
 	if flag&syscall.IFF_MULTICAST > 0 {
 		ss = append(ss, "MULTICAST")
-	}
-	if flag&syscall.IFF_PORTSEL > 0 {
-		ss = append(ss, "PORTSEL")
-	}
-	if flag&syscall.IFF_AUTOMEDIA > 0 {
-		ss = append(ss, "AUTOMEDIA")
-	}
-	if flag&syscall.IFF_DYNAMIC > 0 {
-		ss = append(ss, "DYNAMIC")
 	}
 	//	if flag&syscall.IFF_LOWER_UP > 0 {
 	//		ss = append(ss, "LOWER_UP")
