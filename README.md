@@ -11,7 +11,7 @@ cli, _ := zebra.NewClient("unix", "/var/run/quagga/zserv.api", zebra.ROUTE_BGP)
 
 go func() {
 	for {
-		m := <-cli.Recieve()
+		m := <-cli.Receive()
 		log.Debug(m)
 	}
 }()
